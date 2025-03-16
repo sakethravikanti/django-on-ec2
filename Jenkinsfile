@@ -1,14 +1,20 @@
 pipeline {
-    agent { label 'docker-agent-label' } // Change to your actual node label
+    agent { label 'docker-agent-label' } // Ensure this matches your Jenkins agent label
+
     stages {
         stage('Checkout Code') {
             steps {
                 echo 'Cloning repository...'
-                git branch: 'main', url: 'https://github.com/sakethravikanti/django-on-ec2.git'
+                checkout([$class: 'GitSCM', 
+                    branches: [[name: '*/develop']], 
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/sakethravikanti/django-on-ec2.git', 
+                        credentialsId: 'todo-token' // Make sure this is set up in Jenkins credentials
+                    ]]
+                ])
             }
         }
 
-        
         stage('Code Analysis') {
             steps {
                 echo 'Running code analysis...'
