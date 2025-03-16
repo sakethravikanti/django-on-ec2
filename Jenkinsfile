@@ -1,6 +1,5 @@
 pipeline {
     agent { label 'docker-agent-label' } // Change to your actual node label
-
     stages {
         stage('Checkout Code') {
             steps {
