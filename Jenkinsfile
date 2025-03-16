@@ -1,6 +1,5 @@
 pipeline {
     agent { label 'docker-agent-label' } // Ensure this matches your Jenkins agent label
-
     stages {
         stage('Checkout Code') {
             steps {
