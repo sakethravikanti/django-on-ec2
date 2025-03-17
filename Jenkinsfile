@@ -1,6 +1,5 @@
 pipeline {
     agent { label 'docker-agent-label' }  // Ensure this is the correct agent label
-
     environment {
         EC2_USER = 'ubuntu'  
         EC2_HOST = '13.201.78.62'  // Deployment server IP
