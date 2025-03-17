@@ -1,45 +1,32 @@
 pipeline {
-    agent { label 'docker-agent-label' }  // Adjust the agent label if needed
+    agent { label 'todo-label' }
 
     environment {
-        EC2_USER = 'ubuntu'  
-        EC2_HOST = '13.201.78.62'  // Deployment server IP
-        APP_DIR = '/home/ubuntu/todo-app'  // Deployment directory
+        AWS_ACCOUNT_ID = '571600845308'
+        AWS_REGION = 'ap-south-1'
+        EC2_USER = 'ubuntu'
+        EC2_HOST = '3.109.185.115'
+        APP_DIR = '/home/ubuntu/jenkins/jenkins/workspace/todo-pipeline_main'
+        ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
         PYTHON_BIN = '/usr/bin/python3'
-        DJANGO_MANAGE = 'manage.py'  // Django management script
     }
-
     stages {
-        stage('Clone Repository') {
+        stage('Clone TO-DO Repository') {
             steps {
-                sshagent(['ubuntu']) {  // Using Jenkins credentials ID "ubuntu"
+                withCredentials([string(credentialsId: 'github-token-key', variable: 'GITHUB_TOKEN')]) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-                    if [ ! -d "$APP_DIR" ]; then
-                        git clone https://github.com/sakethravikanti/django-on-ec2.git $APP_DIR
+                    echo "Checking if repository already exists..."
+                    if [ -d "to-do-list-practise/.git" ]; then
+                        echo "Repository exists. Pulling latest changes..."
+                        cd to-do-list-practise
+                        git remote set-url origin https://github.com/sakethravikanti/django-on-ec2.git
+                        git fetch origin main
+                        git reset --hard origin/main
+                        git pull origin main
                     else
-                        cd $APP_DIR
-                        git pull origin develop
+                        echo "Cloning TO-DO LIST repository..."
+                        git clone https://$GITHUB_TOKEN@github.com/sakethravikanti/django-on-ec2.git
                     fi
-                    EOF
-                    '''
-                }
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                sshagent(['ubuntu']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-                    sudo apt update -y
-                    sudo apt install python3-pip python3-venv -y
-                    cd $APP_DIR
-                    python3 -m venv venv
-                    source venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                    EOF
                     '''
                 }
             }
@@ -47,54 +34,71 @@ pipeline {
 
         stage('Run Pylint Checks') {
             steps {
-                sshagent(['ubuntu']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-                    cd $APP_DIR
-                    source venv/bin/activate
-                    pylint $(find . -name "*.py") || true
-                    EOF
-                    '''
-                }
+                sh '''
+                echo "Running Pylint Checks..."
+                if [ -f to-do-list-practise/pylint.sh ]; then
+                    chmod +x to-do-list-practise/pylint.sh
+                    ./to-do-list-practise/pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
+                else
+                    echo "❌ pylint.sh not found. Skipping pylint checks."
+                fi
+                '''
             }
         }
 
-        stage('Run Migrations & Collect Static Files') {
+        stage('Build Docker Image') {
             steps {
-                sshagent(['ubuntu']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-                    cd $APP_DIR
-                    source venv/bin/activate
-                    python $DJANGO_MANAGE migrate
-                    python $DJANGO_MANAGE collectstatic --noinput
-                    EOF
-                    '''
-                }
+                sh '''
+                echo "Building Docker Image..."
+                cd to-do-list-practise
+                docker build -t todo-app -f Dockerfile .
+                docker tag todo-app:latest $ECR_URI:latest
+                '''
             }
         }
 
-        stage('Deploy with Uvicorn') {
+        stage('Login to AWS ECR') {
             steps {
-                sshagent(['ubuntu']) {
+                withCredentials([string(credentialsId: 'aws-key', variable: 'AWS_ECR_PASSWORD')]) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-                    cd $APP_DIR
-                    source venv/bin/activate
-                    
-                    # Kill any existing process on port 8000
-                    fuser -k 8000/tcp || true
-                    
-                    # Run the application using Uvicorn
-                    nohup uvicorn myproject.asgi:application --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
-                    EOF
+                    echo "Logging into AWS ECR..."
+                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
                     '''
                 }
             }
         }
-    }
 
-    triggers {
-        githubPush()  // Auto-trigger pipeline on GitHub push
-    }
+        stage('Push Docker Image to ECR') {
+            steps {
+                sh '''
+                echo "Pushing Docker Image to AWS ECR..."
+                docker push $ECR_URI:latest
+                '''
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
+                    echo "Deploying on EC2..."
+                    ssh -tt -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST bash -c "
+                    set -e
+                    echo 'Checking for existing container...'
+                    docker ps -q --filter 'name=todo-container' | grep -q . && docker stop todo-container && docker rm -f todo-container || echo 'No running container found.'
+
+                    echo 'Checking for processes using port 8000...'
+                    sudo lsof -ti:8000 | xargs -r sudo kill -9 || echo 'No process found on port 8000.'
+
+                    echo 'Pulling latest image from ECR...'
+                    docker pull $ECR_URI:latest
+
+                    echo 'Running new container...'
+                    docker run -d --restart=always -p 8000:8000 --name todo-container $ECR_URI:latest
+                    "
+                    '''
+                }
+            }
+        }
+    }
 }
