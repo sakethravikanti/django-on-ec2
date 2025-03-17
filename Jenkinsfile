@@ -9,7 +9,7 @@ pipeline {
         APP_DIR = '/home/ubuntu/jenkins/jenkins/workspace/todo-pipeline_main'
         ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
         PYTHON_BIN = '/usr/bin/python3'
-        REPO_URL = "https://github.com/sakethravikanti/django-on-ec2.git"
+        REPO_URL = "github.com/sakethravikanti/django-on-ec2.git"
     }
 
     stages {
