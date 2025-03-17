@@ -47,16 +47,17 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                sh '''
-                echo "Building Docker Image..."
-                cd to-do-list-practise
-                docker build -t todo-app -f Dockerfile .
-                docker tag todo-app:latest $ECR_URI:latest
-                '''
-            }
-        }
+stage('Build Docker Image') {
+    steps {
+        sh '''
+        echo "Building Docker Image..."
+        cd to-do-list-practise
+        export DOCKER_BUILDKIT=0
+        docker build -t todo-app -f Dockerfile .
+        '''
+    }
+}
+
 
         stage('Login to AWS ECR') {
             steps {
