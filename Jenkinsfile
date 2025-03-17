@@ -47,16 +47,17 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                sh '''
-                echo "Building Docker Image..."
-                cd to-do-list-practise
-                docker build -t todo-app -f Dockerfile .
-                docker tag todo-app:latest $ECR_URI:latest
-                '''
-            }
+stage('Build Docker Image') {
+    steps {
+        script {
+            echo 'Building Docker Image...'
+            sh '''
+                cd django-on-ec2
+                docker build -t my-django-app .
+            '''
         }
+    }
+}
 
         stage('Login to AWS ECR') {
             steps {
