@@ -26,7 +26,7 @@ pipeline {
                         echo "Repository exists. Pulling latest changes..."
                         cd to-do-list-practise
                         git reset --hard HEAD
-                        git pull origin main || { echo "❌ Git pull failed!"; exit 1; }
+                        git pull origin develop || { echo "❌ Git pull failed!"; exit 1; }
                     fi
                     '''
                 }
