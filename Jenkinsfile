@@ -14,19 +14,19 @@ pipeline {
     stages {
         stage('Clone TO-DO Repository') {
             steps {
-                withCredentials([string(credentialsId: 'github-token-key', variable: 'GITHUB_TOKEN')]) {
+                withCredentials([usernamePassword(credentialsId: 'github-token-key', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
                     sh '''
                     echo "Checking if repository already exists..."
                     if [ -d "to-do-list-practise/.git" ]; then
                         echo "Repository exists. Pulling latest changes..."
                         cd to-do-list-practise
-                        git remote set-url origin https://github.com/sakethravikanti/django-on-ec2.git
+                        git remote set-url origin https://$GIT_USER:$GIT_PASS@github.com/sakethravikanti/django-on-ec2.git
                         git fetch origin main
                         git reset --hard origin/main
                         git pull origin main
                     else
                         echo "Cloning TO-DO LIST repository..."
-                        git clone https://$GITHUB_TOKEN@github.com/sakethravikanti/django-on-ec2.git
+                        git clone https://$GIT_USER:$GIT_PASS@github.com/sakethravikanti/django-on-ec2.git
                     fi
                     '''
                 }
