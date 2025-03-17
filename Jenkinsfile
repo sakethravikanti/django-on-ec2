@@ -1,70 +1,52 @@
 pipeline {
-    agent { label 'docker-agent-label' }
+    agent any
 
     environment {
-        AWS_ACCOUNT_ID = '571600845308'
-        AWS_REGION = 'ap-south-1'
-        EC2_USER = 'ubuntu'
-        EC2_HOST = '3.109.185.115'
-        APP_DIR = '/home/ubuntu/jenkins/jenkins/workspace/todo-pipeline_main'
-        ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
-        PYTHON_BIN = '/usr/bin/python3'
+        AWS_REGION = 'us-east-1' // Change to your AWS region
+        ECR_REPO = 'your-ecr-repository-url' // Change to your ECR repository URL
     }
 
     stages {
-        stage('Clone TO-DO Repository') {
+        stage('Checkout SCM') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-token-key', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
-                    sh '''
-                    echo "Checking if repository already exists..."
-                    if [ -d "to-do-list-practise/.git" ]; then
-                        echo "Repository exists. Pulling latest changes..."
-                        cd to-do-list-practise
-                        git remote set-url origin https://$GIT_USER:$GIT_PASS@github.com/sakethravikanti/django-on-ec2.git
-                        git fetch origin main
-                        git reset --hard origin/main
-                        git pull origin main
-                    else
-                        echo "Cloning TO-DO LIST repository..."
-                        git clone https://$GIT_USER:$GIT_PASS@github.com/sakethravikanti/django-on-ec2.git
-                    fi
-                    '''
+                script {
+                    echo 'Checking out SCM...'
+                    checkout scm
                 }
             }
         }
 
         stage('Run Pylint Checks') {
             steps {
-                sh '''
-                echo "Running Pylint Checks..."
-                if [ -f to-do-list-practise/pylint.sh ]; then
-                    chmod +x to-do-list-practise/pylint.sh
-                    ./to-do-list-practise/pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
-                else
-                    echo "❌ pylint.sh not found. Skipping pylint checks."
-                fi
-                '''
+                script {
+                    echo 'Running Pylint Checks...'
+                    sh '''
+                        cd django-on-ec2
+                        chmod +x pylint.sh
+                        ./pylint.sh
+                    '''
+                }
             }
         }
 
-stage('Build Docker Image') {
-    steps {
-        script {
-            echo 'Building Docker Image...'
-            sh '''
-                cd django-on-ec2
-                docker build -t my-django-app .
-            '''
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo 'Building Docker Image...'
+                    sh '''
+                        cd django-on-ec2
+                        docker build -t my-django-app .
+                    '''
+                }
+            }
         }
-    }
-}
 
         stage('Login to AWS ECR') {
             steps {
-                withCredentials([string(credentialsId: 'aws-key', variable: 'AWS_ECR_PASSWORD')]) {
+                script {
+                    echo 'Logging in to AWS ECR...'
                     sh '''
-                    echo "Logging into AWS ECR..."
-                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
                     '''
                 }
             }
@@ -72,32 +54,22 @@ stage('Build Docker Image') {
 
         stage('Push Docker Image to ECR') {
             steps {
-                sh '''
-                echo "Pushing Docker Image to AWS ECR..."
-                docker push $ECR_URI:latest
-                '''
+                script {
+                    echo 'Pushing Docker Image to ECR...'
+                    sh '''
+                        docker tag my-django-app:latest $ECR_REPO:latest
+                        docker push $ECR_REPO:latest
+                    '''
+                }
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu', keyFileVariable: 'SSH_KEY')]) {
+                script {
+                    echo 'Deploying to EC2...'
                     sh '''
-                    echo "Deploying on EC2..."
-                    ssh -tt -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST bash -c "
-                    set -e
-                    echo 'Checking for existing container...'
-                    docker ps -q --filter 'name=todo-container' | grep -q . && docker stop todo-container && docker rm -f todo-container || echo 'No running container found.'
-
-                    echo 'Checking for processes using port 8000...'
-                    sudo lsof -ti:8000 | xargs -r sudo kill -9 || echo 'No process found on port 8000.'
-
-                    echo 'Pulling latest image from ECR...'
-                    docker pull $ECR_URI:latest
-
-                    echo 'Running new container...'
-                    docker run -d --restart=always -p 8000:8000 --name todo-container $ECR_URI:latest
-                    "
+                        ssh -i /path/to/your-key.pem ec2-user@your-ec2-instance-ip "docker pull $ECR_REPO:latest && docker run -d -p 8000:8000 my-django-app"
                     '''
                 }
             }
