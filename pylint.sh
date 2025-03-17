@@ -1,24 +1,20 @@
 #!/bin/bash
-
 # Enforce strict error handling
 set -euxo pipefail  
 
 # Define variables
-APP_DIR="/home/ubuntu/todo-app"
-VENV_DIR="$APP_DIR/venv"
-UVICORN_CMD="$VENV_DIR/bin/uvicorn"
+APP_DIR="/home/ubuntu/jenkins/jenkins/workspace/todo-pipeline_main/to-do-list-practise"
+PYTHON_BIN="/usr/bin/python3"
 
 # Navigate to the application directory
-cd "$APP_DIR"
+cd "$APP_DIR" || { echo "❌ ERROR: Directory $APP_DIR not found!"; exit 1; }
 
-# Activate the virtual environment
-source "$VENV_DIR/bin/activate"
+# Run Pylint checks
+echo "🔍 Running Pylint Checks..."
+$PYTHON_BIN -m pylint todoApp todos manage.py | tee pylint.log || echo "⚠️ Pylint warnings found, review pylint.log."
 
-# Stop any existing Uvicorn process
-pkill -f "uvicorn" || true
-
-# Start Uvicorn server
-echo "Starting Django app with Uvicorn..."
-nohup $UVICORN_CMD myproject.asgi:application --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+# Start the application
+echo "🚀 Starting Django Application..."
+nohup $PYTHON_BIN manage.py runserver 0.0.0.0:8000 > app.log 2>&1 &
 
 echo "✅ Deployment successful!"
