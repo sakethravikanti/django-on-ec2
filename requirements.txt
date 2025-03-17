@@ -1,7 +1,2 @@
 Django
-uvicorn
-djangorestframework
-pylint
 gunicorn
-psycopg2-binary  # If using PostgreSQL, remove if using SQLite or other DB
-whitenoise  # For serving static files in production
