@@ -1,27 +1,25 @@
 pipeline {
-    agent { label 'docker-agent-label' }  // Ensure correct agent label
+    agent { label 'docker-agent-label' }  // Adjust the agent label if needed
 
     environment {
         EC2_USER = 'ubuntu'  
         EC2_HOST = '13.201.78.62'  // Deployment server IP
-        SSH_KEY = '/var/lib/jenkins/.ssh/id_rsa'  // Path to private key
         APP_DIR = '/home/ubuntu/todo-app'  // Deployment directory
+        PYTHON_BIN = '/usr/bin/python3'
         DJANGO_MANAGE = 'manage.py'  // Django management script
-        VENV_DIR = '${APP_DIR}/venv'  // Virtual environment directory
-        UVICORN_CMD = '${VENV_DIR}/bin/uvicorn'
     }
 
     stages {
         stage('Clone Repository') {
             steps {
-                sshagent(['ubuntu']) {
+                sshagent(['ubuntu']) {  // Using Jenkins credentials ID "ubuntu"
                     sh '''
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST << EOF
+                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
                     if [ ! -d "$APP_DIR" ]; then
-                        git clone git@github.com:sakethravikanti/django-on-ec2.git $APP_DIR
+                        git clone https://github.com/sakethravikanti/django-on-ec2.git $APP_DIR
                     else
                         cd $APP_DIR
-                        git pull origin main
+                        git pull origin develop
                     fi
                     EOF
                     '''
@@ -33,14 +31,12 @@ pipeline {
             steps {
                 sshagent(['ubuntu']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST << EOF
+                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
                     sudo apt update -y
                     sudo apt install python3-pip python3-venv -y
                     cd $APP_DIR
-                    if [ ! -d "$VENV_DIR" ]; then
-                        python3 -m venv venv
-                    fi
-                    source $VENV_DIR/bin/activate
+                    python3 -m venv venv
+                    source venv/bin/activate
                     pip install --upgrade pip
                     pip install -r requirements.txt
                     EOF
@@ -53,10 +49,10 @@ pipeline {
             steps {
                 sshagent(['ubuntu']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST << EOF
+                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
                     cd $APP_DIR
-                    source $VENV_DIR/bin/activate
-                    pylint --fail-under=7 $(find . -name "*.py" ! -path "./venv/*") || true
+                    source venv/bin/activate
+                    pylint $(find . -name "*.py") || true
                     EOF
                     '''
                 }
@@ -67,9 +63,9 @@ pipeline {
             steps {
                 sshagent(['ubuntu']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST << EOF
+                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
                     cd $APP_DIR
-                    source $VENV_DIR/bin/activate
+                    source venv/bin/activate
                     python $DJANGO_MANAGE migrate
                     python $DJANGO_MANAGE collectstatic --noinput
                     EOF
@@ -82,11 +78,15 @@ pipeline {
             steps {
                 sshagent(['ubuntu']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST << EOF
+                    ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
                     cd $APP_DIR
-                    source $VENV_DIR/bin/activate
-                    pkill -f "uvicorn" || true  # Stop any running Uvicorn instance
-                    nohup $UVICORN_CMD myproject.asgi:application --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+                    source venv/bin/activate
+                    
+                    # Kill any existing process on port 8000
+                    fuser -k 8000/tcp || true
+                    
+                    # Run the application using Uvicorn
+                    nohup uvicorn myproject.asgi:application --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
                     EOF
                     '''
                 }
