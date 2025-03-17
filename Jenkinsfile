@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'todo-label' }
+    agent { label 'docker-agent-label' }
 
     environment {
         AWS_ACCOUNT_ID = '571600845308'
