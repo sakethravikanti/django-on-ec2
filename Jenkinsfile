@@ -12,6 +12,7 @@ pipeline {
         REPO_URL = "github.com/sakethravikanti/django-on-ec2.git"
     }
 
+    
     stages {
         stage('Clone TO-DO Repository') {
             steps {
