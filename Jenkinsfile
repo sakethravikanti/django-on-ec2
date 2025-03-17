@@ -1,5 +1,7 @@
 pipeline {
-    agent any
+       agent {
+        label 'docker-agent-label'  // Replace with your actual node label
+    }
 
     environment {
         GIT_REPO = 'https://github.com/sakethravikanti/django-on-ec2.git'
