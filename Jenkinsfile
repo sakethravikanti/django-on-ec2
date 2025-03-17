@@ -1,7 +1,6 @@
 pipeline {
     agent { label 'docker-agent-label' }
 
-    
     environment {
         AWS_ACCOUNT_ID = '571600845308'
         AWS_REGION = 'ap-south-1'
