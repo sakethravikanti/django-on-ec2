@@ -9,6 +9,7 @@ pipeline {
         DJANGO_MANAGE = 'manage.py'  // Django management script
     }
 
+    
     stages {
         stage('Clone Repository') {
             steps {
