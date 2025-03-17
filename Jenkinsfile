@@ -1,33 +1,28 @@
 pipeline {
-    agent { label 'docker-agent-label' }
+    agent any
 
     environment {
-        AWS_ACCOUNT_ID = '571600845308'
-        AWS_REGION = 'ap-south-1'
-        EC2_USER = 'ubuntu'
-        EC2_HOST = '3.109.185.115'
-        APP_DIR = '/home/ubuntu/jenkins/jenkins/workspace/todo-pipeline_main'
-        ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
-        PYTHON_BIN = '/usr/bin/python3'
-        REPO_URL = "github.com/sakethravikanti/django-on-ec2.git"
+        GIT_REPO = 'https://github.com/sakethravikanti/django-on-ec2.git'
+        GIT_BRANCH = 'develop'
+        DOCKER_IMAGE = 'todo-app'
+        DEPLOY_SERVER = 'ubuntu@your-deployment-server-ip'
+        PEM_KEY = '/path/to/your-key.pem' // Update this
     }
 
-    
     stages {
         stage('Clone TO-DO Repository') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-token-key', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                script {
+                    echo 'Checking if repository already exists...'
                     sh '''
-                    echo "Checking if repository already exists..."
-                    if [ ! -d "to-do-list-practise" ]; then
-                        echo "Cloning repository..."
-                        git clone https://$GIT_USER:$GIT_PASS@$REPO_URL to-do-list-practise || { echo "❌ Clone failed!"; exit 1; }
-                    else
-                        echo "Repository exists. Pulling latest changes..."
-                        cd to-do-list-practise
-                        git reset --hard HEAD
-                        git pull origin develop || { echo "❌ Git pull failed!"; exit 1; }
-                    fi
+                        if [ ! -d to-do-list-practise ]; then
+                            git clone -b $GIT_BRANCH $GIT_REPO to-do-list-practise
+                        else
+                            echo "Repository exists. Pulling latest changes..."
+                            cd to-do-list-practise
+                            git reset --hard HEAD
+                            git pull origin $GIT_BRANCH
+                        fi
                     '''
                 }
             }
@@ -35,37 +30,44 @@ pipeline {
 
         stage('Run Pylint Checks') {
             steps {
-                sh '''
-                echo "Running Pylint Checks..."
-                cd to-do-list-practise
-                if [ -f pylint.sh ]; then
-                    chmod +x pylint.sh
-                    ./pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
-                else
-                    echo "❌ pylint.sh not found. Running Pylint manually..."
-                    $PYTHON_BIN -m pylint --errors-only $(find . -name "*.py") || echo "⚠ Pylint warnings found."
-                fi
-                '''
+                script {
+                    echo 'Running Pylint Checks...'
+                    sh '''
+                        cd to-do-list-practise
+                        if [ -f pylint.sh ]; then
+                            chmod +x pylint.sh
+                            ./pylint.sh | tee pylint.log
+                        else
+                            echo "Pylint script not found!"
+                            exit 1
+                        fi
+                    '''
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                echo "Building Docker Image..."
-                cd to-do-list-practise || { echo "❌ Directory not found!"; exit 1; }
-                docker build -t todo-app -f Dockerfile .
-                docker tag todo-app:latest $ECR_URI:latest
-                '''
+                script {
+                    echo 'Building Docker Image...'
+                    sh '''
+                        cd to-do-list-practise
+                        sudo docker build -t $DOCKER_IMAGE -f Dockerfile .
+                    '''
+                }
             }
         }
 
         stage('Login to AWS ECR') {
             steps {
-                withCredentials([string(credentialsId: 'aws-key', variable: 'AWS_ECR_PASSWORD')]) {
+                script {
+                    echo 'Logging in to AWS ECR...'
                     sh '''
-                    echo "Logging into AWS ECR..."
-                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+                        AWS_REGION="your-region"
+                        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                        ECR_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+                        aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $ECR_REPO
                     '''
                 }
             }
@@ -73,32 +75,32 @@ pipeline {
 
         stage('Push Docker Image to ECR') {
             steps {
-                sh '''
-                echo "Pushing Docker Image to AWS ECR..."
-                docker push $ECR_URI:latest
-                '''
+                script {
+                    echo 'Pushing Docker Image to AWS ECR...'
+                    sh '''
+                        AWS_REGION="your-region"
+                        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                        ECR_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+                        sudo docker tag $DOCKER_IMAGE $ECR_REPO/$DOCKER_IMAGE:latest
+                        sudo docker push $ECR_REPO/$DOCKER_IMAGE:latest
+                    '''
+                }
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu', keyFileVariable: 'SSH_KEY')]) {
+                script {
+                    echo 'Deploying Application to EC2...'
                     sh '''
-                    echo "Deploying on EC2..."
-                    ssh -tt -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST bash -c "
-                    set -e
-                    echo 'Checking for existing container...'
-                    docker ps -q --filter 'name=todo-container' | grep -q . && docker stop todo-container && docker rm -f todo-container || echo 'No running container found.'
-
-                    echo 'Checking for processes using port 8000...'
-                    sudo lsof -ti:8000 | xargs -r sudo kill -9 || echo 'No process found on port 8000.'
-
-                    echo 'Pulling latest image from ECR...'
-                    docker pull $ECR_URI:latest
-
-                    echo 'Running new container...'
-                    docker run -d --restart=always -p 8000:8000 --name todo-container $ECR_URI:latest
-                    "
+                        scp -i $PEM_KEY docker-compose.yml $DEPLOY_SERVER:/home/ubuntu/
+                        ssh -i $PEM_KEY $DEPLOY_SERVER << EOF
+                            sudo docker pull $ECR_REPO/$DOCKER_IMAGE:latest
+                            sudo docker stop $DOCKER_IMAGE || true
+                            sudo docker rm $DOCKER_IMAGE || true
+                            sudo docker run -d --name $DOCKER_IMAGE -p 8000:8000 $ECR_REPO/$DOCKER_IMAGE:latest
+                        EOF
                     '''
                 }
             }
