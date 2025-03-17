@@ -10,6 +10,7 @@ pipeline {
         ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
         PYTHON_BIN = '/usr/bin/python3'
     }
+
     stages {
         stage('Clone TO-DO Repository') {
             steps {
@@ -99,6 +100,6 @@ pipeline {
                     '''
                 }
             }
-        }
-    }
+        }
+    }
 }
