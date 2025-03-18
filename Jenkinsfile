@@ -76,7 +76,7 @@ pipeline {
         // 🟢 Login to AWS ECR
         stage('Login to AWS ECR') {
             steps {
-                withCredentials([string(credentialsId: 'aws-key', variable: 'AWS_ECR_PASSWORD')]) {
+                withCredentials([string(credentialsId: 'aws-ecr-tuesday', variable: 'AWS_ECR_PASSWORD')]) {
                     sh '''
                     echo "Logging into AWS ECR..."
                     aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
