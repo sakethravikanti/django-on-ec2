@@ -6,7 +6,7 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         EC2_USER = 'ubuntu'
         EC2_HOST = '3.109.185.115'
-        APP_DIR = '/var/lib/jenkins/workspace/multi-branch_develop'
+        APP_DIR = '/var/lib/jenkins/jenkins/workspace/multi-branch_develop'   
         ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
         PYTHON_BIN = '/usr/bin/python3'
     }
