@@ -6,13 +6,13 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         EC2_USER = 'ubuntu'
         EC2_HOST = '3.109.185.115'
-        APP_DIR = '/var/lib/jenkins/jenkins/workspace/multi-branch_develop'   
+        APP_DIR = '/home/ubuntu/jenkins/jenkins/workspace/multi-branch_develop/django-on-ec2'
         ECR_URI = "571600845308.dkr.ecr.ap-south-1.amazonaws.com/todo/app"
         PYTHON_BIN = '/usr/bin/python3'
     }
 
-    
     stages {
+        // 🟢 Clone the Repository
         stage('Clone TO-DO Repository') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-token-key', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
@@ -34,32 +34,36 @@ pipeline {
             }
         }
 
+        // 🟢 Run Pylint Checks
         stage('Run Pylint Checks') {
             steps {
                 sh '''
                 echo "Running Pylint Checks..."
-                if [ -f ./django-on-ec2/pylint.sh ]; then
-                    chmod +x ./django-on-ec2/pylint.sh
-                    ./django-on-ec2/pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
+                cd django-on-ec2
+                if [ -f pylint.sh ]; then
+                    chmod +x pylint.sh
+                    ./pylint.sh | tee pylint.log || echo "⚠️ Pylint warnings found, review pylint.log."
                 else
-                    echo "❌ pylint.sh not found. Skipping pylint checks."
+                    echo "❌ pylint.sh not found in django-on-ec2 directory. Check file path."
+                    exit 1
                 fi
                 '''
             }
         }
 
-stage('Build Docker Image') {
-    steps {
-        sh '''
-        echo "Building Docker Image..."
-        cd django-on-ec2
-        export DOCKER_BUILDKIT=0
-        docker build -t todo-app -f Dockerfile .
-        '''
-    }
-}
+        // 🟢 Build Docker Image
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                echo "Building Docker Image..."
+                cd django-on-ec2
+                export DOCKER_BUILDKIT=1
+                docker build -t todo-app -f Dockerfile .
+                '''
+            }
+        }
 
-
+        // 🟢 Login to AWS ECR
         stage('Login to AWS ECR') {
             steps {
                 withCredentials([string(credentialsId: 'aws-key', variable: 'AWS_ECR_PASSWORD')]) {
@@ -71,15 +75,18 @@ stage('Build Docker Image') {
             }
         }
 
+        // 🟢 Push Docker Image to ECR
         stage('Push Docker Image to ECR') {
             steps {
                 sh '''
                 echo "Pushing Docker Image to AWS ECR..."
+                docker tag todo-app $ECR_URI:latest
                 docker push $ECR_URI:latest
                 '''
             }
         }
 
+        // 🟢 Deploy to EC2
         stage('Deploy to EC2') {
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu', keyFileVariable: 'SSH_KEY')]) {
@@ -87,6 +94,8 @@ stage('Build Docker Image') {
                     echo "Deploying on EC2..."
                     ssh -tt -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_USER@$EC2_HOST bash -c "
                     set -e
+                    cd $APP_DIR
+
                     echo 'Checking for existing container...'
                     docker ps -q --filter 'name=todo-container' | grep -q . && docker stop todo-container && docker rm -f todo-container || echo 'No running container found.'
 
