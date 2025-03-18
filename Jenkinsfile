@@ -18,9 +18,9 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'github-token-key', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
                     sh '''
                     echo "Checking if repository already exists..."
-                    if [ -d "to-do-list-practise/.git" ]; then
+                    if [ -d "django-on-ec2/.git" ]; then
                         echo "Repository exists. Pulling latest changes..."
-                        cd to-do-list-practise
+                        cd django-on-ec2
                         git remote set-url origin https://$GIT_USER:$GIT_PASS@github.com/sakethravikanti/django-on-ec2.git
                         git fetch origin develop
                         git reset --hard origin/develop
@@ -38,9 +38,9 @@ pipeline {
             steps {
                 sh '''
                 echo "Running Pylint Checks..."
-                if [ -f to-do-list-practise/pylint.sh ]; then
-                    chmod +x to-do-list-practise/pylint.sh
-                    ./to-do-list-practise/pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
+                if [ -f django-on-ec2/pylint.sh ]; then
+                    chmod +x django-on-ec2/pylint.sh
+                    ./django-on-ec2/pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
                 else
                     echo "❌ pylint.sh not found. Skipping pylint checks."
                 fi
@@ -52,7 +52,7 @@ stage('Build Docker Image') {
     steps {
         sh '''
         echo "Building Docker Image..."
-        cd to-do-list-practise
+        cd django-on-ec2
         export DOCKER_BUILDKIT=0
         docker build -t todo-app -f Dockerfile .
         '''
