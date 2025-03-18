@@ -3,7 +3,7 @@
 set -euxo pipefail  
 
 # Define variables
-APP_DIR="/home/ubuntu/jenkins/jenkins/workspace/todo-pipeline_main/django-on-ec2"
+APP_DIR="/home/ubuntu/jenkins/jenkins/workspace/multi-branch_develop/django-on-ec2"
 PYTHON_BIN="/usr/bin/python3"
 
 # Navigate to the application directory
