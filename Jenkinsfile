@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'docker-agent-label' } // Ensure this label matches your Jenkins agent
+    agent { label 'docker-agent-label' } // Ensure this matches your Jenkins agent label
 
     environment {
         AWS_ACCOUNT_ID = '571600845308'
@@ -57,8 +57,19 @@ pipeline {
                 sh '''
                 echo "Building Docker Image..."
                 cd django-on-ec2
-                export DOCKER_BUILDKIT=1
-                docker build -t todo-app -f Dockerfile .
+                export DOCKER_BUILDKIT=0  # ❗️ Disable BuildKit temporarily
+                docker build --no-cache -t todo-app -f Dockerfile .
+                '''
+            }
+        }
+
+        // 🟢 Fix Docker Permission Issue
+        stage('Fix Docker Permissions') {
+            steps {
+                sh '''
+                echo "Ensuring Docker permissions are correct..."
+                sudo usermod -aG docker $USER || echo "User already part of docker group"
+                sudo chmod 666 /var/run/docker.sock
                 '''
             }
         }
@@ -79,8 +90,10 @@ pipeline {
         stage('Push Docker Image to ECR') {
             steps {
                 sh '''
-                echo "Pushing Docker Image to AWS ECR..."
+                echo "Tagging Docker Image..."
                 docker tag todo-app $ECR_URI:latest
+
+                echo "Pushing Docker Image to AWS ECR..."
                 docker push $ECR_URI:latest
                 '''
             }
