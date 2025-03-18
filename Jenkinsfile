@@ -38,8 +38,8 @@ pipeline {
             steps {
                 sh '''
                 echo "Running Pylint Checks..."
-                if [ -f django-on-ec2/pylint.sh ]; then
-                    chmod +x django-on-ec2/pylint.sh
+                if [ -f ./django-on-ec2/pylint.sh ]; then
+                    chmod +x ./django-on-ec2/pylint.sh
                     ./django-on-ec2/pylint.sh | tee pylint.log || echo "⚠ Pylint warnings found, review pylint.log."
                 else
                     echo "❌ pylint.sh not found. Skipping pylint checks."
